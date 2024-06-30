@@ -20,7 +20,7 @@ Table of Contents
 
 1) What is ChordBRR
 
-ChordBRR is a tool that uses existing looped BRR-files and produces wav files that can play several notes at the same time.
+ChordBRR is a tool for sample generation for use with the SPC700 used in the SNES. It uses existing looped BRR-files and produces wav files that plays several notes at the same time.
 
 The tool uses approximations when calculating the different chords. Since frequencies of notes (in equal temperament) do not perfectly line up, the tool stretches the individual waves in order to achieve the smallest possible size within a given error range.
 It is recommended for users to familiarize themselves with the musical concepts described below before using the tool.
@@ -120,4 +120,4 @@ Things I would like to implement:
 - Loading of "!pattern.txt" files to automatically load tuning
 - Option for resampling the BRR sample
 - Show error for each individual note
-- Possibly, the loading of multiple samples
+- The loading of multiple samples (Probably not going to be implemented for 1.0)
