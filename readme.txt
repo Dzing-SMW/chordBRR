@@ -25,6 +25,7 @@ ChordBRR is a tool for sample generation for use with the SPC700 used in the SNE
 The tool uses approximations when calculating the different chords. Since frequencies of notes (in equal temperament) do not perfectly line up, the tool stretches the individual waves in order to achieve the smallest possible size within a given error range.
 It is recommended for users to familiarize themselves with the musical concepts described below before using the tool.
 This youtube video describes these concepts well: https://www.youtube.com/watch?v=7JhVcGtT8z4
+The author is not responsible for the quality of the tool's output. Use your own judgement to determine whether the sample is useable or not.
 
 1.1) Just intonation
 
@@ -93,10 +94,11 @@ Select the number of notes in the chord (up to 5) and the individual notes in th
 Error threshold:
 Choose the maximum error allowed in your chord. The list below shows the matches found below the error threshold. Which lets you choose the desired output (accuracy vs size).
 As a general rule if you keep the error below 5 cent, it should be hard to notice the difference in most cases. Humans tend to be somewhat forgiving when it comes to tuning in chords as we are used to the 12 note equal temperament tuning (which is out of tune).
-One should be aware of beating which typically occurs when playing the same note with slightly different tuning. If this occurs it might be possible to accommodate for it using the $EE command for these notes.
+One should be aware of beating which in some cases can get an increased intensity making it more noticeable.
 
 Just intonation mode:
-Only allows for matches going towards just intonation. When choosing this mode and an error greater than 18 cent, the smallest match will be perfectly in just intonation tuning.
+Only allows for matches going towards just intonation with the lowest note in the chord as the base for the tuning. When choosing this mode and an error greater than 18 cent, the smallest match will be perfectly in just intonation tuning.
+Note that dissonance can still occur between different notes in the chord.
 
 3.3) Finalizing the sample (Tab 3)
 
@@ -120,4 +122,5 @@ Things I would like to implement:
 - Loading of "!pattern.txt" files to automatically load tuning
 - Option for resampling the BRR sample
 - Show error for each individual note
+- Option to choose a different base note for just intonation mode
 - The loading of multiple samples (Probably not going to be implemented for 1.0)
