@@ -10,7 +10,7 @@ from scipy.io import wavfile
 import sounddevice as sd
 
 # ChordBRR
-# Version 0.80b
+# Version 0.81b
 # by Dzing
 
 
@@ -266,13 +266,28 @@ def calculate_wavesequence(reduced):
             x_val = x_val[:nnibbles.size]
         
         if reduced:
-            cspl = interpolate.interp1d(x_val, nnibbles)
+            new_y = interpolate.interp1d(x_val, nnibbles)(new_x_val[:-int(_delays[i]/stp)-1])
         else:
-            cspl = interpolate.CubicSpline(x_val, nnibbles)
-        n_nibbles[i] = np.append(np.zeros(int(_delays[i]/stp)), cspl(new_x_val[:-int(_delays[i]/stp)-1])) * _volumes[i] / 100
+            new_y = sinc_interpolation(nnibbles, x_val, new_x_val[:-int(_delays[i]/stp)-1])
+        n_nibbles[i] = np.append(np.zeros(int(_delays[i]/stp)), new_y) * _volumes[i] / 100
 
     return (n_nibbles, new_x_val, h_l)
 
+def sinc_interpolation(x, s, u):
+            """Whittaker–Shannon or sinc or bandlimited interpolation.
+            Args:
+                x: signal to be interpolated, can be 1D or 2D
+                s: time points of x (*s* for *samples*) 
+                u: time points of y (*u* for *upsampled*)
+            Returns:
+                interpolated signal at time points *u*
+            Reference:
+                This code is based on https://gist.github.com/endolith/1297227
+                and the comments therein.
+            """
+            sinc_ = np.sinc((u - s[:, None])/(s[1]-s[0]))
+
+            return np.dot(x, sinc_)
 
 def calc_wl_error(n_wl, s_wl, nloops):
     c = [0] * len(n_wl)
