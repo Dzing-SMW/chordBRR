@@ -1,6 +1,6 @@
 
 ChordBRR
-Version 0.80b
+Version 0.81b
 by Dzing
 
 -------------------------------
@@ -17,6 +17,7 @@ Table of Contents
 	3.2) Selection of notes in chord (Tab 2)
 	3.3) Finalizing the sample (Tab 3)
  4) Known issues
+ 5) Changelog
 
 1) What is ChordBRR
 
@@ -124,3 +125,7 @@ Things I would like to implement:
 - Show error for each individual note
 - Option to choose a different base note for just intonation mode
 - The loading of multiple samples (Probably not going to be implemented for 1.0)
+
+5) Changelog
+0.81b:
+	- Changed the interpolation method from cubicspline to sinc interpolation to avoid distortion. This interpolation method is slow and can cause a delay from pressing the Play button until you hear the sound.
