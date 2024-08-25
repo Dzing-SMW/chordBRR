@@ -7,10 +7,11 @@ import struct
 import numpy as np
 from scipy import interpolate
 from scipy.io import wavfile
+from scipy import signal
 import sounddevice as sd
 
 # ChordBRR
-# Version 0.81b
+# Version 0.90b
 # by Dzing
 
 
@@ -28,6 +29,8 @@ graph_lines = [0] * 5
 window_state = 0
 
 loop_point = 0
+loop_len = 0
+nloop_point = 0
 nibbles = []
 n_loops = []
 
@@ -35,15 +38,18 @@ listbox_items = []
 _volumes = [100] * 5
 _delays = [0] * 5
 
+n_precision = 10
+scale_factor = 1
+
 # Opens a BRR file
 def open_BRR_file():
-    global nibbles, loop_point
+    global nibbles, nloop_point, loop_point, loop_len
     file_path = filedialog.askopenfilename(title = "Open BRR file...", filetypes = [("BRR files","*.brr")])
     if os.path.isfile(file_path):
         with open(file_path, mode = 'rb') as file:
             fileContent = file.read()
         
-        loop_point = label=get_loop_point(fileContent)
+        loop_point = int(get_loop_point(fileContent))
         
         nibbles = get_nibble_data(fileContent)
         
@@ -51,8 +57,20 @@ def open_BRR_file():
             nibbles = nibbles[16:]
             loop_point -= 16
         
+        loop_len = len(nibbles) - loop_point
         x_data = list(range(len(nibbles)))
         
+        #Get tuning values from !patterns.txt file
+        p_root, f_name = os.path.split(file_path)
+        pattern_file = os.path.join(p_root, '!patterns.txt')
+
+        if os.path.isfile(pattern_file):
+            with open(pattern_file) as file:
+                for line in file:
+                    if line.find(f_name) >= 0:
+                        v = line.split('$')
+                        dpg.set_value("tuningh", v[4].strip())
+                        dpg.set_value("tuningl", v[5].strip())
         
         dpg.set_value("text_filename", os.path.basename(file_path))
         dpg.set_value("text_looppoint", int(loop_point))
@@ -63,6 +81,13 @@ def open_BRR_file():
         dpg.set_axis_limits("x_axis", 0, len(nibbles))
     
         dpg.configure_item("button_next", enabled=True)
+        
+        #Upsample the data with polyphase interpolation, add 16 bits of data at the start and end of the loop to determine the boundary conditions for the interpolation
+        nloop_point = loop_point * n_precision
+        st = signal.resample_poly(nibbles[:loop_point+16],20*n_precision,20)[:nloop_point]
+        nl = np.array(nibbles[loop_point:])
+        nl = np.append(np.append(nl[-16:],nl),nl[:16])
+        nibbles = np.append(st, signal.resample_poly(nl,20*n_precision,20)[16*n_precision:-16*n_precision])
 
 def overflow_check(v):
     v = int(v)  # Make the value an integer
@@ -134,6 +159,7 @@ def button_next():
         dpg.move_item("editnotes", parent="stage1")
         window_state = 2
         dpg.configure_item("button_next", enabled=False)
+        change_tuning()
         generate_graphs()
 
 def button_back():
@@ -225,11 +251,10 @@ def delay_change(sender, app_data):
 
         
 def calculate_wavesequence(reduced):
+    
     loop_error, n_loops = get_matches(sel_octaves, sel_notes, num_notes, dpg.get_value("Threshold") )
     
     sel_match = listbox_items.index(dpg.get_value(listbox1))
-    
-    loop_len = len(nibbles) - loop_point
     
     t = [0] * num_notes
     n_wl = [0] * num_notes
@@ -245,49 +270,30 @@ def calculate_wavesequence(reduced):
     h_l = max(t)
     l = h_l + loop_len * n_loops[sel_match][0]
     
-    dpg.set_value("text_newsize", int(math.ceil(l/16) * 9 +2))
+    dpg.set_value("text_newsize", int(math.ceil(l/16*scale_factor) * 9 +2))
     
     if reduced:
         stp = l/2000
     else:
-        stp = 1
+        stp = 1/scale_factor
     
     new_x_val = np.arange(0, l + 1, stp, dtype=float)
     n_nibbles = [0] * 5
     
     for i in range(num_notes):
         l = math.ceil(((h_l + loop_len * 2 - _delays[i] - loop_point * n_wl[i]) / n[i]))
-        nnibbles = np.array(nibbles[:int(loop_point)])
+        nnibbles = np.array(nibbles[:nloop_point])
         for j in range(l):
-            nnibbles = np.append(nnibbles, nibbles[int(loop_point):])
+            nnibbles = np.append(nnibbles, nibbles[nloop_point:])
         
-        x_val = np.arange(0, nnibbles.size * n_wl[i], n_wl[i], dtype=float)
+        x_val = np.arange(0, nnibbles.size * n_wl[i], n_wl[i]/n_precision, dtype=float)
         if x_val.size > nnibbles.size:
             x_val = x_val[:nnibbles.size]
         
-        if reduced:
-            new_y = interpolate.interp1d(x_val, nnibbles)(new_x_val[:-int(_delays[i]/stp)-1])
-        else:
-            new_y = sinc_interpolation(nnibbles, x_val, new_x_val[:-int(_delays[i]/stp)-1])
+        new_y = interpolate.interp1d(x_val, nnibbles)(new_x_val[:-int(_delays[i]/stp)-1])
         n_nibbles[i] = np.append(np.zeros(int(_delays[i]/stp)), new_y) * _volumes[i] / 100
 
-    return (n_nibbles, new_x_val, h_l)
-
-def sinc_interpolation(x, s, u):
-            """Whittaker–Shannon or sinc or bandlimited interpolation.
-            Args:
-                x: signal to be interpolated, can be 1D or 2D
-                s: time points of x (*s* for *samples*) 
-                u: time points of y (*u* for *upsampled*)
-            Returns:
-                interpolated signal at time points *u*
-            Reference:
-                This code is based on https://gist.github.com/endolith/1297227
-                and the comments therein.
-            """
-            sinc_ = np.sinc((u - s[:, None])/(s[1]-s[0]))
-
-            return np.dot(x, sinc_)
+    return (n_nibbles, new_x_val, int(h_l*scale_factor))
 
 def calc_wl_error(n_wl, s_wl, nloops):
     c = [0] * len(n_wl)
@@ -320,6 +326,80 @@ def get_JI_list(sel_octaves,sel_notes,num_notes):
     
     return JI_list
 
+def change_tuning_dialog(sender, app_data):
+    #Tuning change dialog here
+    dpg.configure_item("modal_id", show=False)
+    change_tuning()
+
+def change_tuning():
+    global scale_factor
+    loop_error, n_loops = get_matches(sel_octaves, sel_notes, num_notes, dpg.get_value("Threshold") )
+    t = dpg.get_value("tuning_type")
+    if t == "Tune for quality":
+        l = n_loops[listbox_items.index(dpg.get_value(listbox1))][0]
+        ll = n_loops[listbox_items.index(dpg.get_value(listbox1))][-1]
+        #Get original tuning
+        th=int(dpg.get_value("tuningh"),16)
+        tl=int(dpg.get_value("tuningl"),16)
+        o_t = (th * 256 + tl)
+        #Get new tuning
+        nwl = max(get_note_wavelength(sel_octaves,sel_notes,num_notes))
+        n_t1 = round(o_t * ll/l) # Tuning for retaining tuning for the upper note in the chord
+        n_t2 = round(1960 * nwl * 261.63) # Tuning for playing the sample at 32khz
+        print(n_t2)
+        if n_t1 < n_t2:
+            n_t = n_t1
+        else:
+            n_t = n_t2
+        #Get number of blocks in the loop
+        blks = loop_len/16
+        #Round tuning towards nearest fitting tuning in order for the loop to become a division of 16
+        n_t = round(round(n_t * l * blks / o_t) * o_t / l / blks)
+        th = math.floor(n_t/256)
+        tl = n_t % 256
+        dpg.set_value("outputtuning","$" + "{:02X}".format(int(th)) + "$" + "{:02X}".format(int(tl)))
+        scale_factor = n_t/o_t
+    elif t == "Custom tuning":
+        l = n_loops[listbox_items.index(dpg.get_value(listbox1))][0]
+        #Get original tuning
+        th=int(dpg.get_value("tuningh"),16)
+        tl=int(dpg.get_value("tuningl"),16)
+        o_t = (th * 256 + tl)
+        #Get new tuning
+        th=int(dpg.get_value("otuningh"),16)
+        tl=int(dpg.get_value("otuningl"),16)
+        n_t = float(th * 256 + tl)
+        #Get number of blocks in the loop
+        blks = loop_len/16
+        #Round tuning towards nearest fitting tuning in order for the loop to become a division of 16
+        n_t = round(round(n_t * l * blks / o_t) * o_t / l / blks)
+        th = math.floor(n_t/256)
+        tl = n_t % 256
+        dpg.set_value("outputtuning","$" + "{:02X}".format(int(th)) + "$" + "{:02X}".format(int(tl)))
+        scale_factor = n_t/o_t
+    else:
+        dpg.set_value("outputtuning","$" + dpg.get_value("tuningh") + "$" + dpg.get_value("tuningl"))
+        scale_factor = 1
+    
+    # Update estimated data size
+    sel_match = listbox_items.index(dpg.get_value(listbox1))
+
+    t = [0] * num_notes
+    n_wl = [0] * num_notes
+    n = [0] * num_notes
+    
+    for i in range(num_notes):
+        n[i] = loop_len / n_loops[sel_match][i]
+    
+    for i in range(num_notes):
+        n_wl[i] = n[i]/n[0]
+        t[i] = loop_point * n_wl[i] + _delays[i]
+
+    h_l = max(t)
+    l = h_l + loop_len * n_loops[sel_match][0]
+    
+    dpg.set_value("text_newsize", int(math.ceil(l/16*scale_factor) * 9 +2))
+    
 
 def get_matches(sel_octaves,sel_notes,num_notes,error_threshold):
 
@@ -373,8 +453,9 @@ def save_wav():
             data = np.add(data, n_nibbles[i])
         
         nwl = max(get_note_wavelength(sel_octaves,sel_notes,num_notes))
-        th=int(dpg.get_value("tuningh"),16)
-        tl=int(dpg.get_value("tuningl"),16)
+        th=int(dpg.get_value("outputtuning")[1:3],16)
+        tl=int(dpg.get_value("outputtuning")[4:6],16)
+        
         fs = int((th * 256 + tl)/(16*nwl))
         
         data = data / np.max(np.absolute(data)) * np.iinfo(np.int16).max
@@ -417,9 +498,10 @@ def play_sound():
     lp = data[int(h_l):]
     
     nwl = max(get_note_wavelength(sel_octaves,sel_notes,num_notes))
-    th=int(dpg.get_value("tuningh"),16)
-    tl=int(dpg.get_value("tuningl"),16)
+    th=int(dpg.get_value("outputtuning")[1:3],16)
+    tl=int(dpg.get_value("outputtuning")[4:6],16)
     fs = int((th * 256 + tl)/(16*nwl))
+    
     
     for i in range(int(2 * fs/(data.size - h_l))):
         data = np.append(data, lp)
@@ -476,7 +558,18 @@ with dpg.stage(tag="stage1"):                   # Generate GUI pages for the not
         with dpg.group(horizontal=True, pos=[8,410]):
             dpg.add_button(label = "Play", callback=play_sound)
             dpg.add_button(label = "Save file", callback=save_wav)
-            dpg.add_text("          ")
+            dpg.add_text("       Output tuning:")
+            dpg.add_text("$04$00", tag="outputtuning", color=(255, 0, 255))
+            dpg.add_button(label = "Change...")
+            with dpg.popup(dpg.last_item(), mousebutton=dpg.mvMouseButton_Left, modal=True, tag="modal_id"):
+                dpg.configure_item("modal_id", label="Change tuning...")
+                dpg.add_radio_button(("Keep original tuning", "Tune for quality", "Custom tuning"),tag="tuning_type")
+                with dpg.group(horizontal=True):
+                    dpg.add_input_text(default_value="04", tag="otuningh", hexadecimal=True, width=30)
+                    dpg.add_input_text(default_value="00", tag="otuningl", hexadecimal=True, width=30)
+                dpg.add_text("")
+                dpg.add_button(label="Ok", width=80, callback=change_tuning_dialog)
+            dpg.add_text("       ")
             dpg.add_text("Estimated BRR size:")
             dpg.add_text("0", tag="text_newsize", color=(255, 0, 255))
 
@@ -497,8 +590,8 @@ with dpg.window(tag="BRR_data_window"):
                     dpg.add_text("", tag="text_looppoint", color=(255, 0, 255))
                 with dpg.group(horizontal=True):
                     dpg.add_text("Tuning")
-                    dpg.add_input_text(default_value="04", tag="tuningh", hexadecimal=True, width=30)
-                    dpg.add_input_text(default_value="00", tag="tuningl", hexadecimal=True, width=30)
+                    dpg.add_input_text(default_value="04", tag="tuningh", hexadecimal=True, width=30, callback=change_tuning)
+                    dpg.add_input_text(default_value="00", tag="tuningl", hexadecimal=True, width=30, callback=change_tuning)
         with dpg.table_row(tag="disprow", height=390):
 
 # GUI for loading BRR files
@@ -519,12 +612,11 @@ with dpg.window(tag="BRR_data_window"):
                 dpg.add_button(label = "back", enabled=False, tag="button_back", callback=button_back)
                 dpg.add_button(label = "next", enabled=False, tag="button_next", callback=button_next)
                 
-        #dpg.configure_item("plotwindow", height = -1)
 
 
 
 
-dpg.create_viewport(title='Chord BRR maker', width=760, height=520, resizable=False)
+dpg.create_viewport(title='ChordBRR', width=760, height=520, resizable=False)
 dpg.setup_dearpygui()
 dpg.show_viewport()
 dpg.set_primary_window("BRR_data_window", True)
