@@ -1,6 +1,6 @@
 
 ChordBRR
-Version 0.81b
+Version 0.90b
 by Dzing
 
 -------------------------------
@@ -105,13 +105,23 @@ Note that dissonance can still occur between different notes in the chord.
 
 Choose the volume and delay (in samples) for each note in the chord.
 
+Change (tuning):
+Pops up a dialog for changing tuning of the output sample with the following options:
+	Keep original tuning:
+	Keep the original tuning of the sample. Note that this will be the tuning for the lowest note in the chord, the higher notes might lose some quality
+	Tune for quality:
+	This option will tune the output sample by choosing the smallest sample of the following tunings; The highest note in the sample keeps the tuning of original sample, or the sample is played at 32 kHz
+	Custom tuning:
+	The output tuning can be given by the user. The output tuning will be adjusted for the loop to be a division of 16.
+
 Play:
-Plays the current chord (tuning of original sample is required for this)
+Plays the current chord
 
 Save:
 Saves the sample as a wav file.
 The output wav file can be converted with a conversion tool. The loop point is stored in the wav file.
-The resulting brr will have the same tuning as the original sample and should be played as the lowest note in your chord.
+The tuning of the output sample shown is the tuning used for the lowest note in the chord.
+
 
 4) Known issues
 
@@ -120,8 +130,6 @@ The resulting brr will have the same tuning as the original sample and should be
 
 
 Things I would like to implement:
-- Loading of "!pattern.txt" files to automatically load tuning
-- Option for resampling the BRR sample
 - Show error for each individual note
 - Option to choose a different base note for just intonation mode
 - The loading of multiple samples (Probably not going to be implemented for 1.0)
@@ -129,3 +137,7 @@ Things I would like to implement:
 5) Changelog
 0.81b:
 	- Changed the interpolation method from cubicspline to sinc interpolation to avoid distortion. This interpolation method is slow and can cause a delay from pressing the Play button until you hear the sound.
+0.90b:
+	- Changed to do the interpolation when loading the sample, making the rest of the process slightly faster
+	- "!patterns.txt" files will now be loaded if available when loading a sample, getting the tuning for the sample
+	- Added options for changing the tuning of the output sample, giving more options for optimizing quality and size
