@@ -1,6 +1,6 @@
 
 ChordBRR
-Version 0.90b
+Version 0.91b
 by Dzing
 
 -------------------------------
@@ -141,3 +141,5 @@ Things I would like to implement:
 	- Changed to do the interpolation when loading the sample, making the rest of the process slightly faster
 	- "!patterns.txt" files will now be loaded if available when loading a sample, getting the tuning for the sample
 	- Added options for changing the tuning of the output sample, giving more options for optimizing quality and size
+0.91b:
+	- Fixed an issue with the loop point not being set correctly
