@@ -346,7 +346,6 @@ def change_tuning():
         nwl = max(get_note_wavelength(sel_octaves,sel_notes,num_notes))
         n_t1 = round(o_t * ll/l) # Tuning for retaining tuning for the upper note in the chord
         n_t2 = round(1960 * nwl * 261.63) # Tuning for playing the sample at 32khz
-        print(n_t2)
         if n_t1 < n_t2:
             n_t = n_t1
         else:
