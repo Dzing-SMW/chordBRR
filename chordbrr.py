@@ -11,7 +11,7 @@ from scipy import signal
 import sounddevice as sd
 
 # ChordBRR
-# Version 0.90b
+# Version 0.91b
 # by Dzing
 
 
@@ -293,7 +293,9 @@ def calculate_wavesequence(reduced):
         new_y = interpolate.interp1d(x_val, nnibbles)(new_x_val[:-int(_delays[i]/stp)-1])
         n_nibbles[i] = np.append(np.zeros(int(_delays[i]/stp)), new_y) * _volumes[i] / 100
 
-    return (n_nibbles, new_x_val, int(h_l*scale_factor))
+    h_l = n_nibbles[0].size - loop_len * n_loops[sel_match][0] * scale_factor
+
+    return (n_nibbles, new_x_val, int(h_l))
 
 def calc_wl_error(n_wl, s_wl, nloops):
     c = [0] * len(n_wl)
@@ -446,7 +448,7 @@ def save_wav():
     if os.path.isdir(os.path.dirname(file_path)):
 
         n_nibbles, new_x_val, h_l = calculate_wavesequence(False)
-        
+             
         data = n_nibbles[0]
         for i in range(1, num_notes):
             data = np.add(data, n_nibbles[i])
@@ -488,6 +490,8 @@ def update_graphs(x, nnibbles):
 # Play a test sound
 def play_sound():
     n_nibbles, new_x_val, h_l = calculate_wavesequence(False)
+    
+    
     data = n_nibbles[0]
     for i in range(1, num_notes):
         data = np.add(data, n_nibbles[i])
