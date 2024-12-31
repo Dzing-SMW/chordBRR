@@ -5,13 +5,13 @@ import os
 import math
 import struct
 import numpy as np
-from scipy import interpolate
 from scipy.io import wavfile
 from scipy import signal
 import sounddevice as sd
+import BRR
 
 # ChordBRR
-# Version 0.91b
+# Version 0.92b
 # by Dzing
 
 
@@ -22,6 +22,8 @@ num_notes = 2
 note_rows = [0] * 5
 sel_octaves = [3] * 5
 sel_notes = [0] * 5
+sel_octaves_u = [3] * 5
+sel_notes_u = [0] * 5
 
 _graphs = [0] * 5
 graph_lines = [0] * 5
@@ -46,12 +48,21 @@ def open_BRR_file():
     global nibbles, nloop_point, loop_point, loop_len
     file_path = filedialog.askopenfilename(title = "Open BRR file...", filetypes = [("BRR files","*.brr")])
     if os.path.isfile(file_path):
-        with open(file_path, mode = 'rb') as file:
-            fileContent = file.read()
+        try:
+            with open(file_path, mode = 'rb') as file:
+                fileContent = file.read()
+        except OSError as e:
+            tk.messagebox.showwarning('Error opening BRR file', "I/O error({0}): {1}".format(e.errno, e.strerror))
+            dpg.configure_item("button_next", enabled=False)
+            return
+        loop_point = int(BRR.get_loop_point(fileContent))
         
-        loop_point = int(get_loop_point(fileContent))
+        nibbles = BRR.get_nibble_data(fileContent)
         
-        nibbles = get_nibble_data(fileContent)
+        if nibbles == -1:
+            tk.messagebox.showwarning('Error opening BRR file', 'Invalid file size')
+            dpg.configure_item("button_next", enabled=False)
+            return
         
         if sum(nibbles[:15]) == 0:  #Remove the first block if it is 0
             nibbles = nibbles[16:]
@@ -89,63 +100,16 @@ def open_BRR_file():
         nl = np.append(np.append(nl[-16:],nl),nl[:16])
         nibbles = np.append(st, signal.resample_poly(nl,20*n_precision,20)[16*n_precision:-16*n_precision])
 
-def overflow_check(v):
-    v = int(v)  # Make the value an integer
-    if v < 0:   # Change the value to unsigned
-        v += 0x10000
-    v = v & 0xFFFF  # Remove the overflow
-    
-    return v-0x10000 if v >= 0x8000 else v # Change back to signed integer
-
-def apply_filter(b_filter,nib1, nib2):
-    if b_filter == 1:
-        return overflow_check(float(nib1 * 15/16))
-    elif b_filter == 2:
-        return overflow_check(float(nib1 * 61/32) - float(nib2 * 15/16))
-    elif b_filter == 3:
-        return overflow_check(float(nib1 * 115/64) - float(nib2 * 13/16))
-    else:
-        return 0
-
-def get_loop_point(fileContent):
-    return struct.unpack('H', fileContent[:2])[0] / 9 * 16
-
-def get_nibble_data(fileContent):
-    data_bytes = struct.unpack('BBBBBBBBB' * ((len(fileContent)-2) // 9), fileContent[2:])
-    
-    nibbles = [0] * (len(data_bytes) // 9 *16)
-    j = 0
-    
-    for i in range(0, len(data_bytes), 9):
-        header = data_bytes[i]        # Header byte
-        b_end = header & 1            # END bit is bit 0
-        b_loop = header & 2           # LOOP bit is bit 1
-        b_filter = (header >> 2) & 3  # FILTER is bits 2 and 3
-        b_range = header >> 4         # RANGE is the upper 4 bits
-        
-        for tmp in data_bytes[i+1:i+9]:
-            nib = tmp >> 4 # Get first nibble
-            nib &= 0xF
-            if nib >= 8:   # Nibble is negative
-                nib -= 16
-            nibbles[j] = overflow_check((nib << b_range) + apply_filter(b_filter, nibbles[j-1], nibbles[j-2]))
-            j += 1
-            nib = tmp & 0xF # Get the second nibble
-            if nib >= 8:   # Nibble is negative
-                nib -= 16
-            nibbles[j] = overflow_check((nib << b_range) + apply_filter(b_filter, nibbles[j-1], nibbles[j-2]))
-            j += 1
-    
-    nib_max = float(max(abs(x) for x in nibbles))
-    norm_nib = [0.0] * len(nibbles)
-    i = 0
-    for x in nibbles:
-        norm_nib[i] = float(x) / nib_max
-        i += 1
-   
-    return norm_nib
-
-
+def sort_notelist():
+        global sel_octaves, sel_notes
+        n = [0] * num_notes
+        for i in range(num_notes):
+            n[i] = sel_octaves_u[i] * 12 + sel_notes_u[i]
+        ns = n[:]
+        ns.sort()
+        for i in range(num_notes):
+            sel_octaves[i] = sel_octaves_u[n.index(ns[i])]
+            sel_notes[i] = sel_notes_u[n.index(ns[i])]
 
 def button_next():
     global window_state
@@ -184,18 +148,20 @@ def note_number_change(sender, app_data):
         if i < num_notes:
             with dpg.group(parent="notegroup", horizontal=True):
                 note_rows[i] = dpg.last_item()
-                dpg.add_combo(_octaves, default_value=_octaves[sel_octaves[i]], tag="oct" + str(i), callback=oct_change, width=80)
-                dpg.add_combo(_notes, default_value=_notes[sel_notes[i]], tag="note" + str(i), callback=note_change, width=80)
+                dpg.add_combo(_octaves, default_value=_octaves[sel_octaves_u[i]], tag="oct" + str(i), callback=oct_change, width=80)
+                dpg.add_combo(_notes, default_value=_notes[sel_notes_u[i]], tag="note" + str(i), callback=note_change, width=80)
         else:
             note_rows[i] = 0
     calc_matches()
 
 def oct_change(sender, app_data):
-    sel_octaves[int(sender[-1:])] = _octaves.index(app_data)
+    sel_octaves_u[int(sender[-1:])] = _octaves.index(app_data)
+    sort_notelist()
     calc_matches()
         
 def note_change(sender, app_data):
-    sel_notes[int(sender[-1:])] = _notes.index(app_data)
+    sel_notes_u[int(sender[-1:])] = _notes.index(app_data)
+    sort_notelist()
     calc_matches()
 
 def calc_matches():
@@ -210,92 +176,83 @@ def calc_matches():
 def generate_graphs():
     global _graphs, graph_lines
     for r in _graphs:
-        dpg.delete_item(r)
-    s = [0] * num_notes
-    for i in range(num_notes):    
-        s[i] = _octaves[sel_octaves[i]] + " " + _notes[sel_notes[i]]
-    s.sort()
+        dpg.delete_item(r)   
+        
     for i in range(5):
         if i < num_notes:
+            s = _octaves[sel_octaves[i]] + " " + _notes[sel_notes[i]]
             with dpg.group(parent="editvolume", horizontal=True):
                 _graphs[i] = dpg.last_item()
-                with dpg.plot(width = 600, height=60):
-                    x_axis = dpg.add_plot_axis(dpg.mvXAxis, no_tick_labels = True, tag = "ax" + str(i))
-                    y_axis = dpg.add_plot_axis(dpg.mvYAxis, no_tick_labels = True, label=s[i])
-                    dpg.set_axis_limits(y_axis, -1, 1)
-                    graph_lines[i] = dpg.add_line_series([],[], parent=y_axis)
-                dpg.add_slider_int(min_value=1, max_value=100, default_value=_volumes[i], vertical = True, height=60, callback=volume_change)
+                dpg.add_input_text(default_value=s, enabled=False, width=50)
+                dpg.add_slider_int(min_value=1, max_value=100, default_value=_volumes[i], vertical = False, height=60, width=300, callback=volume_change)
                 dpg.add_input_int(default_value=_delays[i], width=80, step=100, callback=delay_change)
         else:
             _graphs[i] = 0
-    nnibbles, x, h_l = calculate_wavesequence(True)
-    update_graphs(x, nnibbles)
 
 def volume_change(sender, app_data):
     global _volumes
-    i = _graphs.index(sender - 5)
-    x,n = dpg.get_value(graph_lines[i])
-    for j in range(len(n)):
-        n[j] = n[j]*app_data/_volumes[i]
+    i = _graphs.index(sender - 2)
     _volumes[i] = int(app_data)
-    dpg.set_value(graph_lines[i], [x,n])
 
 def delay_change(sender, app_data):
     global _delays
     if app_data < 0:
         app_data = 0
         dpg.set_value(sender, 0)
-    _delays[_graphs.index(sender - 6)] = int(app_data)
-    nnibbles, x, h_l = calculate_wavesequence(True)
-    update_graphs(x, nnibbles)
+    _delays[_graphs.index(sender - 3)] = int(app_data)
 
         
-def calculate_wavesequence(reduced):
+def calculate_wavesequence():
     
     loop_error, n_loops = get_matches(sel_octaves, sel_notes, num_notes, dpg.get_value("Threshold") )
     
     sel_match = listbox_items.index(dpg.get_value(listbox1))
     
-    t = [0] * num_notes
-    n_wl = [0] * num_notes
+    t = [0] * num_notes # Length of section before the loop point
+    n_wl = [0] * num_notes # Length of one loop
     n = [0] * num_notes
+    d = [0] * num_notes # Delay length
+    
+    th=int(dpg.get_value("tuningh"),16)
+    tl=int(dpg.get_value("tuningl"),16)
+    s_f = (th * 16 + tl/16) * 55.0 * scale_factor # Sample frequency
     
     for i in range(num_notes):
         n[i] = loop_len / n_loops[sel_match][i]
+        d[i] = int(_delays[i] / 1000 * s_f)
     
     for i in range(num_notes):
         n_wl[i] = n[i]/n[0]
-        t[i] = loop_point * n_wl[i] + _delays[i]
+        t[i] = int(math.ceil(loop_point * n_wl[i] * scale_factor)) + d[i]
 
-    h_l = max(t)
-    l = h_l + loop_len * n_loops[sel_match][0]
+    h_l = max(t) # Maximum length of section before the loop point
+    l = h_l + int(round(loop_len * n_loops[sel_match][0] * scale_factor, 0))
     
-    dpg.set_value("text_newsize", int(math.ceil(l/16*scale_factor) * 9 +2))
+    dpg.set_value("text_newsize", int(math.ceil(l/16*scale_factor) * 9 + 2))
     
-    if reduced:
-        stp = l/2000
-    else:
-        stp = 1/scale_factor
     
-    new_x_val = np.arange(0, l + 1, stp, dtype=float)
-    n_nibbles = [0] * 5
+    y_val_h = nibbles[:nloop_point + 1] # Generate arrays for Y values used for interpolation
+    y_val = nibbles[nloop_point - 1:]
+    ll = len(y_val) - 1
+    data = np.zeros(l) # Generate empty array for sample data
     
-    for i in range(num_notes):
-        l = math.ceil(((h_l + loop_len * 2 - _delays[i] - loop_point * n_wl[i]) / n[i]))
-        nnibbles = np.array(nibbles[:nloop_point])
-        for j in range(l):
-            nnibbles = np.append(nnibbles, nibbles[nloop_point:])
-        
-        x_val = np.arange(0, nnibbles.size * n_wl[i], n_wl[i]/n_precision, dtype=float)
-        if x_val.size > nnibbles.size:
-            x_val = x_val[:nnibbles.size]
-        
-        new_y = interpolate.interp1d(x_val, nnibbles)(new_x_val[:-int(_delays[i]/stp)-1])
-        n_nibbles[i] = np.append(np.zeros(int(_delays[i]/stp)), new_y) * _volumes[i] / 100
+    new_x_val = np.arange(0, l, 1, dtype=float) # Generate array for new X values
+    
+    for i in range(num_notes): # Interpolate and add numbers to data array
+        for j in range(l-d[i]):
+            x, r = divmod(j * n_precision / (n_wl[i] * scale_factor), 1)
+            x = int(x)
+            if x < nloop_point:
+                data[j + d[i]] += (y_val_h[x] + (y_val_h[x+1] - y_val_h[x]) * r) * _volumes[i] / 100
+            else:
+                x = (x - nloop_point + 1) % ll
+                data[j + d[i]] += (y_val[x - 1] + (y_val[x] - y_val[x - 1]) * r) * _volumes[i] / 100
 
-    h_l = n_nibbles[0].size - loop_len * n_loops[sel_match][0] * scale_factor
+    n = (16 - h_l % 16) & 15
+    h_l += n
+    data = np.append(np.zeros(n), data)
 
-    return (n_nibbles, new_x_val, int(h_l))
+    return (data, h_l)
 
 def calc_wl_error(n_wl, s_wl, nloops):
     c = [0] * len(n_wl)
@@ -444,57 +401,44 @@ def get_matches(sel_octaves,sel_notes,num_notes,error_threshold):
 
 # Saves a wav file with loop point
 def save_wav():
-    file_path = filedialog.asksaveasfilename(title = "Save as...", filetypes = [("wav files","*.wav")], confirmoverwrite=True, defaultextension=".wav")
+    file_path = filedialog.asksaveasfilename(title = "Save as...", filetypes = [("BRR file","*.brr"), ("wav file","*.wav")], confirmoverwrite=True, defaultextension=".brr")
     if os.path.isdir(os.path.dirname(file_path)):
 
-        n_nibbles, new_x_val, h_l = calculate_wavesequence(False)
-             
-        data = n_nibbles[0]
-        for i in range(1, num_notes):
-            data = np.add(data, n_nibbles[i])
+        data, h_l = calculate_wavesequence()
         
-        nwl = max(get_note_wavelength(sel_octaves,sel_notes,num_notes))
-        th=int(dpg.get_value("outputtuning")[1:3],16)
-        tl=int(dpg.get_value("outputtuning")[4:6],16)
-        
-        fs = int((th * 256 + tl)/(16*nwl))
-        
-        data = data / np.max(np.absolute(data)) * np.iinfo(np.int16).max
-        data = np.append(np.zeros(int(math.ceil(h_l/16)*16 - h_l)), data)
-        wavfile.write(file_path, fs, data.astype(np.int16))
-        
-        # Add the loop point to the file
-        fout = open(file_path, 'ab')
-        
-        fout.write(struct.pack("<lllllllllll", 1819307379, 60, 0, 0, int(1000000000/fs), 60, 0, 0, 0, 1, 0))
-        fout.write(struct.pack("<llllll", 0, 0, int(math.ceil(h_l/16)*16), data.size - 1, 0, 0))
-        
-        fout.close()
-        
-        # Update the chunk size of the main RIFF
-        
-        fout = open(file_path, 'r+b')
-        fout.seek(4)
-        l = struct.unpack("<l", fout.read(4))[0]
-        fout.seek(4)
-        fout.write(struct.pack("<l", l + 60 ))
-        fout.close()
-
-        
-# Update the note graphs in page 3
-def update_graphs(x, nnibbles):
-    for i in range(num_notes):
-        dpg.set_value(graph_lines[i], [x, nnibbles[i]])
-        dpg.set_axis_limits("ax"+str(i), 0, x[x.size-1])
+        if file_path[-3:].casefold() == 'brr':
+            data = data / np.max(np.absolute(data)) * np.iinfo(np.int16).max
+            BRR.saveBRR(h_l, data, file_path)
+        else:
+            nwl = max(get_note_wavelength(sel_octaves,sel_notes,num_notes))
+            th=int(dpg.get_value("outputtuning")[1:3],16)
+            tl=int(dpg.get_value("outputtuning")[4:6],16)
+            
+            fs = int((th * 256 + tl)/(16*nwl))
+            
+            data = data / np.max(np.absolute(data)) * np.iinfo(np.int16).max
+            wavfile.write(file_path, fs, data.astype(np.int16))
+            
+            # Add the loop point to the file
+            fout = open(file_path, 'ab')
+            
+            fout.write(struct.pack("<lllllllllll", 1819307379, 60, 0, 0, int(1000000000/fs), 60, 0, 0, 0, 1, 0))
+            fout.write(struct.pack("<llllll", 0, 0, int(math.ceil(h_l/16)*16), data.size - 1, 0, 0))
+            
+            fout.close()
+            
+            # Update the chunk size of the main RIFF
+            
+            fout = open(file_path, 'r+b')
+            fout.seek(4)
+            l = struct.unpack("<l", fout.read(4))[0]
+            fout.seek(4)
+            fout.write(struct.pack("<l", l + 60 ))
+            fout.close()
         
 # Play a test sound
 def play_sound():
-    n_nibbles, new_x_val, h_l = calculate_wavesequence(False)
-    
-    
-    data = n_nibbles[0]
-    for i in range(1, num_notes):
-        data = np.add(data, n_nibbles[i])
+    data, h_l = calculate_wavesequence()
     
     data = data / np.max(np.absolute(data)) * 0.5 
     
@@ -556,8 +500,8 @@ with dpg.stage(tag="stage1"):                   # Generate GUI pages for the not
     
     with dpg.group(tag="editvolume"):
         dpg.add_text("")
-        dpg.add_text("Vol", pos=[616,52])
-        dpg.add_text("Delay", pos=[650,52])
+        dpg.add_text("Volume (%)", pos=[66,58])
+        dpg.add_text("Delay (ms)", pos=[376,58])
         with dpg.group(horizontal=True, pos=[8,410]):
             dpg.add_button(label = "Play", callback=play_sound)
             dpg.add_button(label = "Save file", callback=save_wav)
