@@ -1,0 +1,192 @@
+import numpy as np
+import struct
+
+def overflow_check(v):
+    v = int(v)  # Make the value an integer
+    if v < 0:   # Change the value to unsigned
+        v += 0x10000
+    v = v & 0xFFFF  # Remove the overflow
+    
+    return v-0x10000 if v >= 0x8000 else v # Change back to signed integer
+
+def apply_filter(b_filter,nib1, nib2):
+    if b_filter == 1:
+        return overflow_check(float(nib1 * 15/16))
+    elif b_filter == 2:
+        return overflow_check(float(nib1 * 61/32) - float(nib2 * 15/16))
+    elif b_filter == 3:
+        return overflow_check(float(nib1 * 115/64) - float(nib2 * 13/16))
+    else:
+        return 0
+
+def get_loop_point(fileContent):
+    return struct.unpack('H', fileContent[:2])[0] / 9 * 16
+
+def get_nibble_data(fileContent):
+    if (len(fileContent) - 2) % 9 > 0:
+        return -1
+    data_bytes = struct.unpack('BBBBBBBBB' * ((len(fileContent)-2) // 9), fileContent[2:])
+    
+    nibbles = [0] * (len(data_bytes) // 9 *16)
+    j = 0
+    
+    for i in range(0, len(data_bytes), 9):
+        header = data_bytes[i]        # Header byte
+        b_end = header & 1            # END bit is bit 0
+        b_loop = header & 2           # LOOP bit is bit 1
+        b_filter = (header >> 2) & 3  # FILTER is bits 2 and 3
+        b_range = header >> 4         # RANGE is the upper 4 bits
+        
+        for tmp in data_bytes[i+1:i+9]:
+            nib = tmp >> 4 # Get first nibble
+            nib &= 0xF
+            if nib >= 8:   # Nibble is negative
+                nib -= 16
+            nibbles[j] = overflow_check((nib << b_range) + apply_filter(b_filter, nibbles[j-1], nibbles[j-2]))
+            j += 1
+            nib = tmp & 0xF # Get the second nibble
+            if nib >= 8:   # Nibble is negative
+                nib -= 16
+            nibbles[j] = overflow_check((nib << b_range) + apply_filter(b_filter, nibbles[j-1], nibbles[j-2]))
+            j += 1
+    
+    nib_max = float(max(abs(x) for x in nibbles))
+    norm_nib = [0.0] * len(nibbles)
+    i = 0
+    for x in nibbles:
+        norm_nib[i] = float(x) / nib_max
+        i += 1
+   
+    return norm_nib
+
+def calc_range(b_filter, nib1, nib2, nibbles):
+
+    unib = [0.0] * 16
+
+    for i in range(16): # Create unfiltered values
+        unib[i] = calc_unfilteredvalue(b_filter, nib1, nib2, nibbles[i])
+        nib2 = nib1
+        nib1 = nibbles[i]
+    
+    r = 0
+    while max(unib) > 7.5 or min(unib) < -8.5:
+        unib = np.divide(unib, 2)
+        r += 1
+    return r
+
+def calc_unfilteredvalue(b_filter, nib1, nib2, nibble):
+    if b_filter == 1:
+        u = overflow_check(float(nibble - nib1 * 15/16))
+    elif b_filter == 2:
+        u = overflow_check(float(nibble - nib1 * 61/32 + nib2 * 15/16))
+    elif b_filter == 3:
+        u = overflow_check(float(nibble - nib1 * 115/64 + nib2 * 13/16))
+    else:
+        u = float(nibble)
+    return u
+    
+def calc_filteredvalue(b_filter, nib1, nib2, nibble):
+    if b_filter == 1:
+        u = float(nibble + nib1 * 15/16)
+    elif b_filter == 2:
+        u = float(nibble + nib1 * 61/32 - nib2 * 15/16)
+    elif b_filter == 3:
+        u = float(nibble + nib1 * 115/64 - nib2 * 13/16)
+    else:
+        u = float(nibble)
+    return int(u)
+    
+def calc_block(nib1, nib2, nibbles, looped, filters):
+    
+    nnibb = [0.0] * 16
+    nerrorb = 0x7FFFFFFFFFFFFFFF
+    fb = 0
+    rb = 0
+    n1b = 0
+    n2b = 0
+    
+    for f in range(4):
+        if filters & (1 << f) == (1 << f):
+            r = calc_range(f, nib1, nib2, nibbles)
+                           
+            n1 = nib1
+            n2 = nib2
+            
+            nnib = [0.0] * 16
+            nerror = 0
+            
+            for i in range(16):
+                n = int(round(calc_unfilteredvalue(f, n1, n2, nibbles[i]) / 2**r, 0))
+                if n < -8: # Make sure that values don't exceed valid values (as the range value is calculated approximately)
+                    n = -8
+                if n > 7:
+                    n = 7
+                nv = calc_filteredvalue(f, n1, n2, n << r) # Watch out for overflow
+                while nv > 32766:
+                    n -= 1
+                    nv = calc_filteredvalue(f, n1, n2, n << r)
+                while nv < -32767:
+                    n += 1
+                    nv = calc_filteredvalue(f, n1, n2, n << r)
+                nerror += (nibbles[i] - nv) ** 2
+                if n < 0:
+                    n += 16
+                nnib[i] = n
+                n2 = n1
+                n1 = nv
+            
+            if nerror < nerrorb:
+                nerrorb = nerror
+                nnibb = nnib[:]
+                fb = f
+                rb = r
+                n1b = n1
+                n2b = n2
+                
+    
+    ndata = [0] * 9 # Make BRR block from data
+    ndata[0] = (looped << 1) + (fb << 2) + (rb << 4)
+    for i in range(8):
+        ndata[i+1] = (nnibb[i*2] << 4) + nnibb[i*2+1]
+    
+    return n1b, n2b, ndata, fb
+
+def saveBRR(loop_point, data, file_name):
+    
+    nib1 = 0
+    nib2 = 0
+    
+    if loop_point > -1:
+        l = 1
+        lz = 16 + ((16 - loop_point % 16) & 15 )
+        data = np.append(np.zeros(lz), data)
+        loop_point += lz
+    else:
+        l = 0
+        data = np.append(np.zeros( (16 - len(data) % 16) & 15 ), data)
+        loop_point = 0
+        
+    with open(file_name, mode = 'wb') as file:
+        file.seek(0)
+        lp = int(loop_point / 16 * 9)
+        file.write(bytearray([lp & 0xFF, lp >> 8]))
+        
+        for i in range(0, len(data) - 16, 16):
+            n1 = nib1
+            n2 = nib2
+            if i == 0:
+                nib1, nib2, ndata, filter = calc_block(nib1, nib2, data[i:i+16], l, 1)
+            else:
+                nib1, nib2, ndata, filter = calc_block(nib1, nib2, data[i:i+16], l, 15)
+            file.write(bytearray(ndata))
+            if i == loop_point:
+                if filter == 1:
+                    data[-1] = n1
+                elif filter > 1:
+                    data[-1] = n1
+                    data[-2] = n2
+        file.truncate()
+        nib1, nib2, ndata, filter = calc_block(nib1, nib2, data[-16:], l, 15)
+        ndata[0] = ndata[0] + 1
+        file.write(bytearray(ndata))
+        
