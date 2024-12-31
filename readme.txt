@@ -142,4 +142,5 @@ The tuning shown is for the lowest note in the chord.
 	- Added some error handling for opening BRR files
 	- Removed graphs from tab 3. Even though it was nice visually, it also caused some lag issues when swapping to this tab
 	- Overhauled the interpolation greatly increasing its speed and lowering its memory usage
+	- Delays are now in ms dependant on the tuning set for the sample
 	- Added the option to save as a BRR file directly
