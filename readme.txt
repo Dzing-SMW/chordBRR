@@ -1,6 +1,6 @@
 
 ChordBRR
-Version 0.91b
+Version 0.92b
 by Dzing
 
 -------------------------------
@@ -118,9 +118,10 @@ Play:
 Plays the current chord
 
 Save:
-Saves the sample as a wav file.
-The output wav file can be converted with a conversion tool. The loop point is stored in the wav file.
-The tuning of the output sample shown is the tuning used for the lowest note in the chord.
+Saves the sample as a BRR file or wav file.
+The BRR output makes a fit using all BRR filters, if more advanced options are needed, storing it as a wav file first and use more advanced tools for converting the BRR
+For the wav output, the loop point is stored in the wav file.
+The tuning shown is for the lowest note in the chord.
 
 
 4) Known issues
@@ -143,3 +144,8 @@ Things I would like to implement:
 	- Added options for changing the tuning of the output sample, giving more options for optimizing quality and size
 0.91b:
 	- Fixed an issue with the loop point not being set correctly
+0.92b:
+	- Added some error handling for opening BRR files
+	- Removed graphs from tab 3. Even though it was nice visually, it also caused some lag issues when swapping to this tab
+	- Overhauled the interpolation greatly increasing its speed and lowering its memory usage
+	- Added the option to save as a BRR file directly
