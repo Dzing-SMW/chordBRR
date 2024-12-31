@@ -126,14 +126,8 @@ The tuning shown is for the lowest note in the chord.
 
 4) Known issues
 
-- There are no error messages when loading a BRR file of the wrong format
 - There is no check whether a BRR sample is looped or not and the tool assumes the sample is looped
 
-
-Things I would like to implement:
-- Show error for each individual note
-- Option to choose a different base note for just intonation mode
-- The loading of multiple samples (Probably not going to be implemented for 1.0)
 
 5) Changelog
 0.81b:
