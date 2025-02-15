@@ -1,3 +1,19 @@
+#   ChordBRR v1.00 - A program for generating chord samples for the SPC700
+#   Copyright (C) 2025  Dzing
+
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import dearpygui.dearpygui as dpg
 import tkinter as tk
 from tkinter import filedialog
@@ -9,10 +25,6 @@ from scipy.io import wavfile
 from scipy import signal
 import sounddevice as sd
 import BRR
-
-# ChordBRR
-# Version 0.92b
-# by Dzing
 
 
 # Initialize global variables
@@ -152,6 +164,7 @@ def note_number_change(sender, app_data):
                 dpg.add_combo(_notes, default_value=_notes[sel_notes_u[i]], tag="note" + str(i), callback=note_change, width=80)
         else:
             note_rows[i] = 0
+    sort_notelist()
     calc_matches()
 
 def oct_change(sender, app_data):
@@ -200,7 +213,34 @@ def delay_change(sender, app_data):
         app_data = 0
         dpg.set_value(sender, 0)
     _delays[_graphs.index(sender - 3)] = int(app_data)
+    calculate_filesize()
 
+def calculate_filesize():
+    loop_error, n_loops = get_matches(sel_octaves, sel_notes, num_notes, dpg.get_value("Threshold") )
+    
+    sel_match = listbox_items.index(dpg.get_value(listbox1))
+    
+    t = [0] * num_notes # Length of section before the loop point
+    n_wl = [0] * num_notes # Length of one loop
+    n = [0] * num_notes
+    d = [0] * num_notes # Delay length
+    
+    th=int(dpg.get_value("tuningh"),16)
+    tl=int(dpg.get_value("tuningl"),16)
+    s_f = (th * 16 + tl/16) * 55.0 * scale_factor # Sample frequency
+    
+    for i in range(num_notes):
+        n[i] = loop_len / n_loops[sel_match][i]
+        d[i] = int(_delays[i] / 1000 * s_f)
+    
+    for i in range(num_notes):
+        n_wl[i] = n[i]/n[0]
+        t[i] = int(math.ceil(loop_point * n_wl[i] * scale_factor)) + d[i]
+
+    h_l = max(t) # Maximum length of section before the loop point
+    l = h_l + int(round(loop_len * n_loops[sel_match][0] * scale_factor, 0))
+    
+    dpg.set_value("text_newsize", int(math.ceil(l/16*scale_factor) * 9 + 11))
         
 def calculate_wavesequence():
     
@@ -227,9 +267,6 @@ def calculate_wavesequence():
 
     h_l = max(t) # Maximum length of section before the loop point
     l = h_l + int(round(loop_len * n_loops[sel_match][0] * scale_factor, 0))
-    
-    dpg.set_value("text_newsize", int(math.ceil(l/16*scale_factor) * 9 + 2))
-    
     
     y_val_h = nibbles[:nloop_point + 1] # Generate arrays for Y values used for interpolation
     y_val = nibbles[nloop_point - 1:]
@@ -340,23 +377,7 @@ def change_tuning():
         scale_factor = 1
     
     # Update estimated data size
-    sel_match = listbox_items.index(dpg.get_value(listbox1))
-
-    t = [0] * num_notes
-    n_wl = [0] * num_notes
-    n = [0] * num_notes
-    
-    for i in range(num_notes):
-        n[i] = loop_len / n_loops[sel_match][i]
-    
-    for i in range(num_notes):
-        n_wl[i] = n[i]/n[0]
-        t[i] = loop_point * n_wl[i] + _delays[i]
-
-    h_l = max(t)
-    l = h_l + loop_len * n_loops[sel_match][0]
-    
-    dpg.set_value("text_newsize", int(math.ceil(l/16*scale_factor) * 9 +2))
+    calculate_filesize()
     
 
 def get_matches(sel_octaves,sel_notes,num_notes,error_threshold):
