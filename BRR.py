@@ -1,4 +1,4 @@
-#   ChordBRR v1.00 - A program for generating chord samples for the SPC700
+#   ChordBRR v1.02 - A program for generating chord samples for the SPC700
 #   Copyright (C) 2025  Dzing
 
 #   This program is free software: you can redistribute it and/or modify
@@ -27,11 +27,19 @@ def overflow_check(v):
 
 def apply_filter(b_filter,nib1, nib2):
     if b_filter == 1:
-        return overflow_check(float(nib1 * 15/16))
+        return nib1 - (nib1 >> 4)
     elif b_filter == 2:
-        return overflow_check(float(nib1 * 61/32) - float(nib2 * 15/16))
+        p = nib1 << 1
+        p += (-(nib1 + (nib1 << 1))) >> 5
+        p -= nib2
+        p += nib2 >> 4
+        return p
     elif b_filter == 3:
-        return overflow_check(float(nib1 * 115/64) - float(nib2 * 13/16))
+        p = nib1 << 1
+        p += (-(nib1 + (nib1 << 2) + (nib1 << 3))) >> 6
+        p -= nib2
+        p += (nib2 + (nib2 << 1)) >> 4
+        return p
     else:
         return 0
 
@@ -91,26 +99,10 @@ def calc_range(b_filter, nib1, nib2, nibbles):
     return r
 
 def calc_unfilteredvalue(b_filter, nib1, nib2, nibble):
-    if b_filter == 1:
-        u = overflow_check(float(nibble - nib1 * 15/16))
-    elif b_filter == 2:
-        u = overflow_check(float(nibble - nib1 * 61/32 + nib2 * 15/16))
-    elif b_filter == 3:
-        u = overflow_check(float(nibble - nib1 * 115/64 + nib2 * 13/16))
-    else:
-        u = float(nibble)
-    return u
-    
+    return nibble - apply_filter(b_filter, int(nib1), int(nib2))
+
 def calc_filteredvalue(b_filter, nib1, nib2, nibble):
-    if b_filter == 1:
-        u = float(nibble + nib1 * 15/16)
-    elif b_filter == 2:
-        u = float(nibble + nib1 * 61/32 - nib2 * 15/16)
-    elif b_filter == 3:
-        u = float(nibble + nib1 * 115/64 - nib2 * 13/16)
-    else:
-        u = float(nibble)
-    return int(u)
+    return nibble + apply_filter(b_filter, int(nib1), int(nib2))
     
 def calc_block(nib1, nib2, nibbles, looped, filters):
     
@@ -132,7 +124,7 @@ def calc_block(nib1, nib2, nibbles, looped, filters):
             nerror = 0
             
             for i in range(16):
-                n = int(round(calc_unfilteredvalue(f, n1, n2, nibbles[i]) / 2**r, 0))
+                n = int(calc_unfilteredvalue(f, n1, n2, nibbles[i]) / 2**r)
                 if n < -8: # Make sure that values don't exceed valid values (as the range value is calculated approximately)
                     n = -8
                 if n > 7:
@@ -149,7 +141,7 @@ def calc_block(nib1, nib2, nibbles, looped, filters):
                     n += 16
                 nnib[i] = n
                 n2 = n1
-                n1 = nv
+                n1 = int(nv)
             
             if nerror < nerrorb:
                 nerrorb = nerror

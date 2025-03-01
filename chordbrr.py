@@ -1,4 +1,4 @@
-#   ChordBRR v1.00 - A program for generating chord samples for the SPC700
+#   ChordBRR v1.02 - A program for generating chord samples for the SPC700
 #   Copyright (C) 2025  Dzing
 
 #   This program is free software: you can redistribute it and/or modify
