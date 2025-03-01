@@ -1,6 +1,6 @@
 
 ChordBRR
-Version 1.00
+Version 1.02
 by Dzing
 
 -------------------------------
@@ -146,3 +146,6 @@ The tuning shown is for the lowest note in the chord.
 	- Added the option to save as a BRR file directly
 1.00:
 	- Fixed a couple of UI bugs
+1.02:
+	- Fixed rounding error when calculating filters
+	- Fixed error causing overload on rare occasions when saving a BRR file
