@@ -1,4 +1,4 @@
-#   ChordBRR v1.02 - A program for generating chord samples for the SPC700
+#   ChordBRR v1.03 - A program for generating chord samples for the SPC700
 #   Copyright (C) 2025  Dzing
 
 #   This program is free software: you can redistribute it and/or modify
@@ -269,8 +269,8 @@ def calculate_wavesequence():
     l = h_l + int(round(loop_len * n_loops[sel_match][0] * scale_factor, 0))
     
     y_val_h = nibbles[:nloop_point + 1] # Generate arrays for Y values used for interpolation
-    y_val = nibbles[nloop_point - 1:]
-    ll = len(y_val) - 1
+    y_val = nibbles[nloop_point:]
+    ll = len(y_val)
     data = np.zeros(l) # Generate empty array for sample data
     
     new_x_val = np.arange(0, l, 1, dtype=float) # Generate array for new X values
