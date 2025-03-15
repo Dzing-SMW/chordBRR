@@ -150,4 +150,4 @@ The tuning shown is for the lowest note in the chord.
 	- Fixed rounding error when calculating filters
 	- Fixed error causing overload on rare occasions when saving a BRR file
 1.03:
-	-Fixed a bug for BRR samples where the loop point starts immidiately
+	-Fixed a bug for BRR samples where the loop point starts immediately
