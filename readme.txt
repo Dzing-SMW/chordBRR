@@ -1,6 +1,6 @@
 
 ChordBRR
-Version 1.02
+Version 1.03
 by Dzing
 
 -------------------------------
@@ -149,3 +149,5 @@ The tuning shown is for the lowest note in the chord.
 1.02:
 	- Fixed rounding error when calculating filters
 	- Fixed error causing overload on rare occasions when saving a BRR file
+1.03:
+	-Fixed a bug for BRR samples where the loop point starts immidiately
