@@ -1,5 +1,5 @@
-#   ChordBRR v1.03 - A program for generating chord samples for the SPC700
-#   Copyright (C) 2025  Dzing
+#   ChordBRR v1.04 - A program for generating chord samples for the SPC700
+#   Copyright (C) 2026  Dzing
 
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -76,6 +76,12 @@ def open_BRR_file():
             dpg.configure_item("button_next", enabled=False)
             return
         
+        norm_nib = [0.0] * len(nibbles)
+        i = 0
+        for x in nibbles:
+            norm_nib[i] = float(x) / 32768
+            i += 1
+        
         if sum(nibbles[:15]) == 0:  #Remove the first block if it is 0
             nibbles = nibbles[16:]
             loop_point -= 16
@@ -98,8 +104,7 @@ def open_BRR_file():
         dpg.set_value("text_filename", os.path.basename(file_path))
         dpg.set_value("text_looppoint", int(loop_point))
         dpg.set_value("text_size", len(nibbles))
-        
-        dpg.set_value("BRRplot", [x_data, nibbles])
+        dpg.set_value("BRRplot", [x_data, norm_nib])
         dpg.set_value("BRRlooppoint", [ [loop_point, loop_point], [-1, 1]] )
         dpg.set_axis_limits("x_axis", 0, len(nibbles))
     
@@ -429,7 +434,8 @@ def save_wav():
         
         if file_path[-3:].casefold() == 'brr':
             data = data / np.max(np.absolute(data)) * np.iinfo(np.int16).max
-            BRR.saveBRR(h_l, data, file_path)
+            data = np.append(np.zeros(16), data)
+            BRR.saveBRR(h_l + 16, data, file_path)
         else:
             nwl = max(get_note_wavelength(sel_octaves,sel_notes,num_notes))
             th=int(dpg.get_value("outputtuning")[1:3],16)
